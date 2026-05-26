@@ -8,79 +8,42 @@
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet"/>
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
-  <!-- Firebase -->
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js";
-    import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-
-    const firebaseConfig = {
-      apiKey: "AIzaSyDuGNGyNXclE_n-zFdvszYSEFVKM25QzYE",
-      authDomain: "smart-grocery-340b6.firebaseapp.com",
-      projectId: "smart-grocery-340b6",
-      storageBucket: "smart-grocery-340b6.firebasestorage.app",
-      messagingSenderId: "838641807761",
-      appId: "1:838641807761:web:848eee024ae7b084e6ea30"
-    };
-
-    const VAPID_KEY = "BJy1q8-u3U1XSTHshq5NxjYO8ynihdAgAFKttqpfbPnwpPmtQ-WoU5HlI-sQEKm56RulRduSGTstNexx9l_Nzig";
-
-    const app = initializeApp(firebaseConfig);
-    const messaging = getMessaging(app);
-    const db = getFirestore(app);
-
-    // Register service worker for background notifications
-    async function registerSW() {
-      if('serviceWorker' in navigator) {
-        try {
-          const reg = await navigator.serviceWorker.register('/Smart_grocery-/firebase-messaging-sw.js');
-          return reg;
-        } catch(e) { console.warn('SW register failed:', e); }
-      }
-    }
-
-    // Get FCM token and save to Firestore
-    window.fcmInit = async function() {
-      try {
-        await registerSW();
-        const token = await getToken(messaging, { vapidKey: VAPID_KEY });
-        if(token) {
-          console.log('FCM Token:', token);
-          // Save token to Firestore
-          const tokens = await getDocs(collection(db, 'tokens'));
-          const exists = tokens.docs.some(d => d.data().token === token);
-          if(!exists) await addDoc(collection(db, 'tokens'), { token, ts: Date.now() });
-          window._fcmToken = token;
-          window._fcmDb = db;
-          window._fcmCollection = collection;
-          window._fcmGetDocs = getDocs;
-          window._fcmAddDoc = addDoc;
-          console.log('✅ FCM registered');
-        }
-      } catch(e) { console.warn('FCM init error:', e); }
-    };
-
-    // Send push to all tokens via Firestore (admin triggers Cloud Function)
-    window.sendFCMToAll = async function(title, body) {
-      try {
-        await addDoc(collection(db, 'push_queue'), { title, body, ts: Date.now(), sent: false });
-        console.log('✅ Push queued:', title, body);
-      } catch(e) { console.warn('Push queue error:', e); }
-    };
-
-    // Listen for foreground messages
-    onMessage(messaging, (payload) => {
-      console.log('FCM foreground message:', payload);
-      const { title, body } = payload.notification || {};
-      if(title) {
-        try { new Notification(title, { body, icon: 'https://cdn.jsdelivr.net/npm/twemoji@14/2/72x72/1f6d2.png' }); } catch{}
-      }
+  <!-- OneSignal Push Notifications -->
+  <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+  <script>
+    window.OneSignalDeferred = window.OneSignalDeferred || [];
+    OneSignalDeferred.push(async function(OneSignal) {
+      await OneSignal.init({
+        appId: "593fa76b-57ba-4b52-93e1-67d113c86695",
+        notifyButton: { enable: false },
+        allowLocalhostAsSecureOrigin: true,
+      });
     });
 
-    // Auto init when page loads
-    window.addEventListener('load', () => {
-      if(Notification.permission === 'granted') window.fcmInit();
-    });
+    // Send notification to ALL subscribers via OneSignal REST API
+    window.sendPushToAll = async function(title, message) {
+      try {
+        const res = await fetch('https://onesignal.com/api/v1/notifications', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            // REST API key — keep this private, only used from admin URL
+            'Authorization': 'Basic YOUR_REST_API_KEY'
+          },
+          body: JSON.stringify({
+            app_id: '593fa76b-57ba-4b52-93e1-67d113c86695',
+            included_segments: ['Total Subscriptions'],
+            headings: { en: title },
+            contents: { en: message },
+          })
+        });
+        const data = await res.json();
+        console.log('Push sent:', data);
+        return data;
+      } catch(e) {
+        console.error('Push error:', e);
+      }
+    };
   </script>
   <style>
     *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -414,13 +377,11 @@ function sendCustSuggestion() {
 
   const messages = custom ? [custom] : tagged.map(s => s.text);
 
-  // Send to ALL customers via FCM
+  // Send to ALL customers via OneSignal
   messages.forEach((msg, i) => {
     setTimeout(() => {
-      if(window.sendFCMToAll) window.sendFCMToAll('📣 Smart Grocery', msg);
-      // Also show locally
-      if(Notification.permission === 'granted') sendNotif('📣 Smart Grocery', msg, 'cust-'+i);
-    }, i * 400);
+      if(window.sendPushToAll) window.sendPushToAll('📣 Smart Grocery', msg);
+    }, i * 600);
   });
 
   S.custSent = true;
