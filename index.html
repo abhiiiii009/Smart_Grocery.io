@@ -17,17 +17,17 @@
         appId: "593fa76b-57ba-4b52-93e1-67d113c86695",
         notifyButton: { enable: false },
         allowLocalhostAsSecureOrigin: true,
+        serviceWorkerPath: "/Smart_grocery-/OneSignalSDKWorker.js",
+        serviceWorkerParam: { scope: "/Smart_grocery-/" },
       });
     });
 
-    // Send notification to ALL subscribers via OneSignal REST API
     window.sendPushToAll = async function(title, message) {
       try {
         const res = await fetch('https://onesignal.com/api/v1/notifications', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            // REST API key — keep this private, only used from admin URL
             'Authorization': 'Basic YOUR_REST_API_KEY'
           },
           body: JSON.stringify({
